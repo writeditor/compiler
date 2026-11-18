@@ -1,0 +1,3 @@
+[submodule "vendor/rash"]
+	path = vendor/rash
+	url = https://github.com/essepuntato/rash.git

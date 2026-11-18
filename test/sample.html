@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8"/>
+  <title>HTML Is All You Need: Semantic Scholarly Writing Without LaTeX</title>
+  <meta name="dc.creator" content="Jane Doe"/>
+</head>
+<body>
+  <section role="doc-abstract">
+    <h1>Abstract</h1>
+    <p>We argue that scholarly articles should be authored directly in semantic HTML. Using <strong>RASH</strong>, a strict subset of HTML, papers become machine-readable by construction: every section, figure and citation is addressable, searchable and editable by both humans and agents.</p>
+  </section>
+  <section id="introduction">
+    <h1>Introduction</h1>
+    <p>LaTeX produces beautiful PDFs, but the PDF is where structure goes to die. Search engines, reviewers and AI agents all need the structure back <a href="#b1">[1]</a>, <a href="#b2">[2]</a>.</p>
+    <p>Typesetting systems such as LaTeX <a href="#b3">[3]</a> and the literate-programming tradition <a href="#b4">[4]</a> showed that a document can be both readable and machine-processed; we bring that idea to the web.</p>
+    <p>An inline formula stays formal: <span role="math">E = mc^2</span>.</p>
+    <section id="contributions">
+      <h1>Contributions</h1>
+      <ul>
+        <li><p>An editor that writes RASH natively.</p></li>
+        <li><p>Two-way sync between the HTML source and the visual editor.</p></li>
+        <li><p>Per-change attribution for people and agents.</p></li>
+      </ul>
+    </section>
+  </section>
+  <section id="method">
+    <h1>Method</h1>
+    <p>The document model is a ProseMirror schema that mirrors RASH one-to-one, as shown in <a href="#fig-arch">Figure 1</a>. Collaborative editing uses a CRDT <a href="#b5">[5]</a>, and the semantic structure keeps papers findable and reusable in the sense of the FAIR principles <a href="#b6">[6]</a>.</p>
+    <figure id="fig-arch">
+      <p><img src="data:image/png;base64,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" alt="Architecture"/></p>
+      <figcaption>The HTML file is the single source of truth.</figcaption>
+    </figure>
+    <blockquote><p>Structure is a feature, not a formatting accident.</p></blockquote>
+  </section>
+  <section role="doc-bibliography">
+    <h1>References</h1>
+    <ul>
+      <li id="b1" role="doc-biblioentry"><p>Peroni, S. et al. (2017). Research Articles in Simplified HTML: a Web-first format for HTML-based scholarly articles. PeerJ Computer Science 3:e132.</p></li>
+      <li id="b2" role="doc-biblioentry"><p>Peroni, S., Shotton, D. (2018). The SPAR Ontologies. In: ISWC 2018, LNCS 11137, pp. 119-136.</p></li>
+      <li id="b3" role="doc-biblioentry"><p>Lamport, L. (1994). LaTeX: A Document Preparation System, 2nd ed. Addison-Wesley.</p></li>
+      <li id="b4" role="doc-biblioentry"><p>Knuth, D. E. (1984). Literate Programming. The Computer Journal 27(2):97-111.</p></li>
+      <li id="b5" role="doc-biblioentry"><p>Nicolaescu, P., Jahns, K., Derntl, M., Klamma, R. (2016). Near real-time peer-to-peer shared editing on extensible data types. In: GROUP 2016, pp. 39-49.</p></li>
+      <li id="b6" role="doc-biblioentry"><p>Wilkinson, M. D. et al. (2016). The FAIR Guiding Principles for scientific data management and stewardship. Scientific Data 3:160018.</p></li>
+    </ul>
+  </section>
+</body>
+</html>
