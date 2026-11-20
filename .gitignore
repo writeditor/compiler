@@ -1,2 +1,9 @@
 node_modules/
 *.tsbuildinfo
+eval/out/
+eval/classes/*
+.venv/
+__pycache__/
+.pytest_cache/
+skills/
+test/chr-sample.html

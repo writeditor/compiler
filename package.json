@@ -3,19 +3,48 @@
   "version": "0.1.0",
   "description": "Compiles RASH (semantic scholarly HTML) to LaTeX; PDF, DOCX and XML targets to follow.",
   "type": "module",
-  "engines": { "node": ">=24" },
-  "exports": { ".": "./src/index.ts" },
-  "files": ["src", "xslt"],
+  "engines": {
+    "node": ">=24"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./pdf": "./pdf/index.ts"
+  },
+  "files": [
+    "src",
+    "xslt",
+    "pdf"
+  ],
   "scripts": {
-    "test": "node --test 'test/**/*.test.ts'",
-    "typecheck": "tsc --noEmit"
+    "test": "make test",
+    "typecheck": "make typecheck"
   },
   "dependencies": {
     "linkedom": "0.18.14",
     "xslt-processor": "5.1.3"
   },
+  "peerDependencies": {
+    "katex": "0.19.1",
+    "pagedjs": "0.4.3",
+    "puppeteer-core": "25.18.1"
+  },
+  "peerDependenciesMeta": {
+    "katex": { "optional": true },
+    "pagedjs": { "optional": true },
+    "puppeteer-core": { "optional": true }
+  },
   "devDependencies": {
     "@types/node": "26.6.5",
+    "@writeditor/styles": "link:../styles",
+    "katex": "0.19.1",
+    "pagedjs": "0.4.3",
+    "puppeteer-core": "25.18.1",
     "typescript": "7.0.2"
+  },
+  "pnpm": {
+    "ignoredBuiltDependencies": [
+      "core-js",
+      "es5-ext"
+    ]
   }
 }

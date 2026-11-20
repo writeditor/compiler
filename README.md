@@ -22,10 +22,20 @@ Text, URLs, ids, paths, verbatim blocks and math are sanitised so a paper cannot
 ## Development
 
 ```sh
-git submodule update --init   # upstream RASH examples used by test/upstream.test.ts (vendor/rash)
+git submodule update --init   # upstream RASH examples used by test/test_upstream.py (vendor/rash)
 pnpm install
-pnpm test
-pnpm typecheck
+make test        # Python tests in a venv (.venv)
+make typecheck
 ```
 
 Adding a target: a new `src/<target>.ts` that takes a RASH string, exported from `src/index.ts`, with tests next to the others. Adding a venue: `xslt/<id>.xsl` plus an entry in `VENUES`.
+
+## Evaluation
+
+```sh
+make eval-build
+make eval                 # every paper and style, writes eval/results.csv
+make eval ARGS=arxiv      # one style: its reference sample, compiled by LaTeX, by our LaTeX route and by the Paged.js route
+```
+
+One row per paper and template: whether the exported `.tex` compiles with `latexmk`, page count, undefined references. Add metrics as columns in `eval/score.ts`.

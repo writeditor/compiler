@@ -1,0 +1,6 @@
+test/chr-sample.html is not in this repository (third-party content). It is a RASH (HTML) version of the sample document of the
+Cambridge University Press "Computational Humanities Research" LaTeX template (archive "Computational_Humanities_Research_Template__CUP_.zip"),
+used by test_venue.py to check the Cambridge export. Put it here as test/chr-sample.html.
+
+Source URL: (add it)
+Licence: (add it)

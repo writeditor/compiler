@@ -3,9 +3,13 @@
 import { readFileSync } from "node:fs";
 import { parseHTML } from "linkedom";
 import { Xslt, XmlParser } from "xslt-processor";
-import { toLaTeX, TEMPLATES } from "./latex.ts";
+import { toLaTeX, tex as escapeTex, TEMPLATES } from "./latex.ts";
 
-export const VENUES = { cambridge: new URL("../xslt/cambridge.xsl", import.meta.url) } as const;
+export const VENUES = {
+  cambridge: new URL("../xslt/cambridge.xsl", import.meta.url),
+  ceur: new URL("../xslt/ceur.xsl", import.meta.url),
+  oup: new URL("../xslt/oup.xsl", import.meta.url),
+} as const;
 export type Venue = keyof typeof VENUES;
 
 /** An unknown template name; callers map it to a bad request. */
@@ -13,11 +17,16 @@ export class UnknownTemplateError extends Error {}
 
 export async function toLaTeXVenue(html: string, venue: Venue): Promise<string> {
   // amsart already puts the abstract before \maketitle, which gives clean cut points; the stylesheet re-places both.
-  const tex = toLaTeX(html, "amsart");
+  const doc = parseHTML(html).document;
+  const pages = Math.floor(Number(doc.querySelector(`meta[property="writ:${venue}.firstPageSections"]`)?.getAttribute("content")));
+  const tex = toLaTeX(html, "amsart", venue === "cambridge" ? { natbib: true, cup: true, copbreak: pages > 0 ? pages : 3 } : { natbib: true });
   const abstract = tex.match(/\\begin\{abstract\}\n([\s\S]*?)\\end\{abstract\}/)?.[1].trim() ?? "";
   const body = tex.slice(tex.indexOf("\\maketitle\n") + "\\maketitle\n".length, tex.lastIndexOf("\\end{document}"));
   const p = new XmlParser();
-  const xml = html.replace(/ xmlns="[^"]*"/, ""); // plain XPath names: no XHTML namespace to bind
+  // The stylesheet copies head values as they are: escaping per character in XSLT is too slow for a long string, so it is done here.
+  const text = (v: string) => escapeTex(parseHTML(`<p>${v}</p>`).document.querySelector("p")!.textContent ?? "").replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+  const xml = html.replace(/ xmlns="[^"]*"/, "") // plain XPath names: no XHTML namespace to bind
+    .replace(/(<meta\b[^>]*?\scontent=")([^"]*)"/g, (_, a, v) => `${a}${text(v)}"`).replace(/(<title>)([^<]*)/, (_, a, v) => a + text(v));
   return new Xslt({ escape: false, parameters: [{ name: "abstract", value: abstract }, { name: "body", value: body.replace(/^\n+/, "") }] })
     .xsltProcess(p.xmlParse(xml), p.xmlParse(readFileSync(VENUES[venue], "utf8")));
 }
