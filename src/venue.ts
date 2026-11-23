@@ -1,16 +1,16 @@
 // LaTeX for a venue whose class needs its own front matter, done with an XSLT stylesheet over the paper's RASH head.
 // Node only: the stylesheet is read from disk. The input must be well-formed XML, which RASH is.
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { parseHTML } from "linkedom";
 import { Xslt, XmlParser } from "xslt-processor";
 import { toLaTeX, tex as escapeTex, TEMPLATES } from "./latex.ts";
 
-export const VENUES = {
-  cambridge: new URL("../xslt/cambridge.xsl", import.meta.url),
-  ceur: new URL("../xslt/ceur.xsl", import.meta.url),
-  oup: new URL("../xslt/oup.xsl", import.meta.url),
-} as const;
-export type Venue = keyof typeof VENUES;
+/** A style that exports through XSLT carries its own stylesheet: styles/src/<id>/export.xsl. No registry here. */
+const styles = dirname(dirname(fileURLToPath(import.meta.resolve("@writeditor/styles"))));
+export const VENUES: Record<string, string> = Object.fromEntries(readdirSync(`${styles}/src`).map((id) => [id, `${styles}/src/${id}/export.xsl`]).filter(([, f]) => existsSync(f)));
+export type Venue = string;
 
 /** An unknown template name; callers map it to a bad request. */
 export class UnknownTemplateError extends Error {}
@@ -34,7 +34,7 @@ export async function toLaTeXVenue(html: string, venue: Venue): Promise<string> 
 /** LaTeX for any template by name (default: the paper's own `writ:style`): the built-in preambles, or an XSLT venue. */
 export async function exportLaTeX(html: string, template?: string): Promise<string> {
   template ||= parseHTML(html).document.querySelector('meta[property="writ:style"]')?.getAttribute("content") || "rash";
-  if (template in VENUES) return toLaTeXVenue(html, template as Venue);
+  if (template in VENUES) return toLaTeXVenue(html, template);
   if (!(template in TEMPLATES)) throw new UnknownTemplateError(`Unknown template "${template}"; use ${[...Object.keys(TEMPLATES), ...Object.keys(VENUES)].join(", ")}`);
   return toLaTeX(html, template as keyof typeof TEMPLATES);
 }

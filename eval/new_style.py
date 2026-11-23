@@ -50,6 +50,6 @@ with open(root / ".gitignore", "a") as g:
 print(f"""created {d}
 next:
   1. put the class and the sample in class/ and sample/ (see SOURCE.txt) and name the sample in venue.json
-  2. the compiler needs a LaTeX template called "{sid}": add it to TEMPLATES in compiler/src/latex.ts (or xslt/{sid}.xsl + VENUES in src/venue.ts)
+  2. the compiler needs a LaTeX template called "{sid}": add it to TEMPLATES in compiler/src/latex.ts (or src/{sid}/export.xsl in the styles package: it is found by folder name)
   3. extend compiler/eval/tex2rash.ts for the constructs the sample uses
   4. (cd {root} && pnpm build)  then  make eval ARGS={sid}  and follow the tex-to-exporter loop""")

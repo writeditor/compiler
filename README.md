@@ -28,7 +28,7 @@ make test        # Python tests in a venv (.venv)
 make typecheck
 ```
 
-Adding a target: a new `src/<target>.ts` that takes a RASH string, exported from `src/index.ts`, with tests next to the others. Adding a venue: `xslt/<id>.xsl` plus an entry in `VENUES`.
+Adding a target: a new `src/<target>.ts` that takes a RASH string, exported from `src/index.ts`, with tests next to the others. Adding a venue: `styles/src/<id>/export.xsl` (found by folder name, no registry here).
 
 ## Evaluation
 

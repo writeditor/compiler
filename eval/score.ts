@@ -63,3 +63,16 @@ for (const [c, t] of jobs) for (const p of c === "ref" ? [ref[t]] : [...corpus, 
   console.error(lines.at(-1)); // progress
 }
 if (!only) writeFileSync(root + "eval/results.csv", lines.join("\n") + "\n"); // a partial run never overwrites the full table
+
+// Each measured style keeps its result in its own README, between markers: what was compared, and the values.
+for (const t of new Set(lines.slice(1).map((l) => l.split(",")[1]).filter((t) => venues[t] && !missing.has(t)))) {
+  const rows = ["ref", "ts", "paged"].flatMap((c) => lines.slice(1).filter((l) => { const f = l.split(","); return f[1] === t && f[2] === c && f[0] === relative(root, venues[t].sample); }).map((l) => [c, ...l.split(",").slice(3)]));
+  const rep = (c: string) => { try { return JSON.parse(readFileSync(`${root}eval/out/${t}/${c}/${venues[t].sample.split("/").pop()!.replace(/\.tex$/, "")}.${t}.${c}.report.json`, "utf8")); } catch { return null; } };
+  const table = ["| Output | Compiles | Pages | Undefined refs | Style score | Failed checks | Pixel diff by page |", "|---|---|---|---|---|---|---|", ...rows.map(([c, ok, pages, undef, score]) => {
+    const r = rep(c);
+    return `| ${c === "ref" ? "reference (official class)" : c === "ts" ? "LaTeX (our compiler)" : "PDF (paged)"} | ${ok} | ${pages || "-"} | ${undef || "-"} | ${score || "-"} | ${r ? Object.entries(r.checks).filter(([, v]) => !v).map(([k]) => k).join(", ") || "none" : "-"} | ${r ? r.pixel_diff_by_page.join(" / ") : "-"} |`;
+  })].join("\n");
+  const block = `<!-- metrics:start -->\n## Compilation check\n\nSample: \`${relative(venues[t].dir, venues[t].sample)}\`, converted to RASH, compiled by each output and compared with the reference PDF. Last run ${new Date().toISOString().slice(0, 10)} (\`make eval ARGS=${t}\`).\n\n${table}\n\nStyle score: share of the checks (page size, fonts, margins, leading, header/footer, title) that match the reference. Pixel diff: share of pixels that differ on each page (0 = identical). Both are measured, never edited by hand.\n<!-- metrics:end -->`;
+  const f = `${venues[t].dir}/README.md`, old = existsSync(f) ? readFileSync(f, "utf8") : `# ${t}\n\n`;
+  writeFileSync(f, /<!-- metrics:start -->[\s\S]*<!-- metrics:end -->/.test(old) ? old.replace(/<!-- metrics:start -->[\s\S]*<!-- metrics:end -->/, () => block) : old.trimEnd() + "\n\n" + block + "\n");
+}
