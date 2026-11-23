@@ -21,7 +21,7 @@ def test_authors_sharing_an_affiliation_share_a_column_and_the_title_is_small_ca
     head = ('<meta about="#a" name="dc.creator" content="A"/><link about="#a" property="schema:affiliation" href="#o1"/><meta about="#b" name="dc.creator" content="B"/><link about="#b" property="schema:affiliation" href="#o1"/>'
             '<meta about="#c" name="dc.creator" content="C"/><link about="#c" property="schema:affiliation" href="#o2"/>' + org("o1") + org("o2") + '<meta property="writ:cite" content="Citation: X. Y."/>')
     h = tex(page('<section><h1>S</h1></section>', head).replace("<title>T</title>", "<title>My Title</title>"), box=True)
-    assert h.count('class="p-col"') == 2 and '<span class="p-name">A, B</span>' in h
+    assert h.count('<address class="authors">') == 2 and re.search(r'>A</strong>, <strong [^>]*>B</strong>', h), h
     has(h, '<span class="p-sc">y</span>', '<span class="p-foot"><i><u>Citation</u></i>: <b>X. Y.</b></span>')
 
 
@@ -34,3 +34,9 @@ def test_footnotes_links_citations_and_formulas():
     assert re.search(r'Section <a [^>]*p-ref[^>]*>2</a>', h), h  # only the number is the link
     assert "Notes" not in h, "the endnotes list is dropped"
     assert re.search(r'\[<a [^>]*p-cite[^>]*>1</a>, <a [^>]*p-cite[^>]*>2</a>\]', h), h  # natbib: one bracket pair, numbers linked
+
+
+def test_full_stops_get_tex_space_except_after_a_capital_and_the_abstract_heading_is_small_caps():
+    h = box('<section role="doc-abstract"><h1>Abstract</h1><p>One end. Two. Mr. Smith A. Jones.</p></section>')
+    assert 'end.<span class="p-ss"> </span>Two.<span class="p-ss"> </span>Mr.<span class="p-ss"> </span>Smith A. Jones.' in h, h
+    has(h, 'A<span class="p-sc">bstract</span>')
