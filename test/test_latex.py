@@ -104,3 +104,8 @@ def test_tables_colspan_and_booktabs():
     bt, plain = tex(t, "arxiv"), tex(t, "rash")
     assert "\\toprule\n\\multicolumn{2}{c}{P} \\\\\n\\cmidrule(r){1-2}\nA & B \\\\\n\\midrule\n1 & 2 \\\\\n\\bottomrule" in bt, bt
     assert "\\hline\n\\multicolumn{2}{c}{\\textbf{P}} \\\\" in plain, plain
+
+
+def test_strikethrough_is_sout_with_ulem():
+    t = tex("<html><head><title>T</title></head><body><section><h1>A</h1><p>keep <s>gone</s></p></section></body></html>")
+    has(t, r"\sout{gone}", r"\usepackage[normalem]{ulem}")

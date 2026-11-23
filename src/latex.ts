@@ -117,6 +117,7 @@ export function toLaTeX(html: string, template: Template = "rash", opts: Options
       case "script": case "style": case "template": return "";
       case "code": return `\\texttt{${inline(e)}}`;
       case "u": return `\\underline{${inline(e)}}`;
+      case "s": return `\\sout{${inline(e)}}`; // formatting strikethrough (ulem), not an edit
       case "em": case "i": return `\\emph{${inline(e)}}`;
       case "strong": case "b": return `\\textbf{${inline(e)}}`;
       case "sup": return `\\textsuperscript{${inline(e)}}`;
@@ -260,7 +261,7 @@ export function toLaTeX(html: string, template: Template = "rash", opts: Options
   // Neighbouring citations separated only by a comma are one \cite{a,b}, which numbers compress to [1, 2];
   const merge = (t: string) => { for (let p = ""; p !== t;) { p = t; t = t.replace(/\\(cite[pt]?)\{([^{}]*)\}, \\\1\{([^{}]*)\}/g, "\\$1{$2,$3}"); } return t.replace(/\n\n(\\begin\{equation\}|\\\[)/g, "\n$1"); }; // and a display after a blank line would open an empty paragraph first
   const body = merge(rest.map((n, i) => (i === firstBack ? "\\begin{Backmatter}\n\n" : "") + (tagOf(n) === "p" ? block(n, 0) : section(n, 0))).join("") + (firstBack < 0 ? "" : "\\end{Backmatter}\n\n"));
-  return `${T.preamble}
+  return `${T.preamble}${body.includes("\\sout{") ? "\n\\usepackage[normalem]{ulem}" : ""}
 \\title{${tex(meta.title)}${meta.subtitle ? ` \\\\ \\large ${tex(meta.subtitle)}` : ""}${titleNote}}
 ${!authors ? "" : "and" in T ? `\\author{${authors}}\n` : authors + "\n"}\\begin{document}
 ${abstract}${T.abstractFirst ? keywords : ""}\\maketitle
