@@ -1,6 +1,7 @@
 """Create a new style folder in the styles package, ready for the tex-to-exporter loop.
    python3 eval/new_style.py <id> "<Name>" [--root <path to the styles package>]      (or: make new-style ID=<id> NAME="<Name>")
-Writes src/<id>/{style.css,editor.css,index.ts,venue.json,SOURCE.txt}, registers it in src/index.ts and gitignores its third-party folders."""
+Writes src/<id>/{style.css,index.ts,venue.json,SOURCE.txt}, registers it in src/index.ts and gitignores its third-party folders.
+   style.css is written in bare RASH selectors; index.ts binds it to the paper box with scoped() (see the style-from-tex skill)."""
 import re, sys
 from pathlib import Path
 
@@ -11,22 +12,30 @@ if len(args) != 2 or not re.fullmatch(r"[a-z][a-z0-9]*", args[0]):
     sys.exit('usage: new_style.py <id> "<Name>"   (id: lowercase letters and digits, it is also the compiler template name)')
 sid, name = args
 d = root / "src" / sid
-if d.exists():
-    sys.exit(f"{d} already exists")
-
-(d / "class").mkdir(parents=True)
-(d / "sample").mkdir()
-(d / "media").mkdir()
-(d / "style.css").write_text('''@page { size: letter; margin: 1in; }
-.paper-pdf { font: 10pt/1.1 "Times New Roman", "Nimbus Roman", Times, serif; }
-/* Fix one element at a time, top-down, against the sample's PDF: see the tex-to-exporter skill. */
+# A folder that only holds the venue's export.xsl (an XSLT venue that has no style yet) is filled in; one with a style is never touched.
+if (d / "index.ts").exists() or (d / "style.css").exists():
+    sys.exit(f"{d} already has a style")
+for sub in ("class", "sample", "media"):
+    (d / sub).mkdir(parents=True, exist_ok=True)
+(d / "style.css").write_text(f'''/*
+ * {name}: drawn in CSS from the venue's official LaTeX sample.
+ *
+ * Class   (name the class and where it comes from; see SOURCE.txt)
+ * CSS     Bare RASH selectors, like rash.css: `section > h1`, `.p-title`, `figure`. index.ts binds them to the paper box (scope.ts) and :scope is that box,
+ *         so write `:scope > section` for a top-level section, never .paper-pdf and never an editor selector.
+ *
+ * Measures (pt unless noted): fill in as each element is measured against the sample
+ */
+@page {{ size: letter; margin: 1in; }}
+:scope {{ font: 10pt/1.2 "Times New Roman", "Nimbus Roman", Times, var(--font-serif4, serif), serif; }}
+/* Fix one element at a time, top-down, against the sample's PDF: see the style-pdf-look skill. */
 ''')
-(d / "editor.css").write_text("/* glue for the editing page only; the look is style.css */\n")
 (d / "index.ts").write_text(f'''import type {{ Style }} from "../types.ts";
 import {{ CSS }} from "../css.generated.ts";
+import {{ scoped }} from "../scope.ts";
 
-// Real CSS lives next to this file (style.css, editor.css); `pnpm build` inlines it into css.generated.ts.
-export const {sid}: Style = {{ ...{{ id: "{sid}", name: "{name}", paper: "US Letter", page: {{ size: [215.9, 279.4], margins: [25.4, 25.4, 25.4, 25.4] }}, fields: [] }}, css: CSS["{sid}/style"], editor: CSS["{sid}/editor"] }};
+// The CSS lives next to this file (style.css); `pnpm build` inlines it into css.generated.ts, scoped() binds its bare selectors to the paper box.
+export const {sid}: Style = {{ ...{{ id: "{sid}", name: "{name}", paper: "US Letter", page: {{ size: [215.9, 279.4], margins: [25.4, 25.4, 25.4, 25.4] }}, fields: [] }}, css: scoped(CSS["{sid}/style"]), editor: "" }};
 ''')
 (d / "venue.json").write_text('{ "sample": "sample/REPLACE-WITH-SAMPLE.tex", "dirs": ["class", "sample"], "media": "media" }\n')
 (d / "SOURCE.txt").write_text(f'''The LaTeX files of the {name} style are third-party and not in git. Get them and put them here:
@@ -52,4 +61,4 @@ next:
   1. put the class and the sample in class/ and sample/ (see SOURCE.txt) and name the sample in venue.json
   2. the compiler needs a LaTeX template called "{sid}": add it to TEMPLATES in compiler/src/latex.ts (or src/{sid}/export.xsl in the styles package: it is found by folder name)
   3. extend compiler/eval/tex2rash.ts for the constructs the sample uses
-  4. (cd {root} && pnpm build)  then  make eval ARGS={sid}  and follow the tex-to-exporter loop""")
+  4. (cd {root} && pnpm build)  then  make eval ARGS={sid}  and follow the style-from-tex skill""")
