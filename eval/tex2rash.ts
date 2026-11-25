@@ -1,9 +1,11 @@
 // LaTeX sample -> RASH, so the compiler under test and the reference LaTeX start from the same content.
 // Covers the article subset the official venue samples use (sections, lipsum, cite/ref, lists, figure, table, verbatim, quote, center, footnotes, .bib).
-// Also the ceurart sample (\author[1]{Name}[email=..] with \address[1]{..}, keywords, listings); the head is read by class, the body is shared.
+// What differs per class is data in the style's venue.json ("tex": see venues.ts), not code here: where the front matter sits, how authors are written, which \commands become writ:<id>.<field> meta.
+// The ceurart form (\author[1]{Name}[email=..] with \address[1]{..}) is "authors": "bracket"; the body is shared.
 // shortcut: no macros, no nested environments, \fbox{\rule..} figures become figure1.png; extend per venue sample when a new one needs it.
 import { readFileSync, existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { venues } from "./venues.ts";
 
 const typo = (s: string) => s.replace(/---/g, "\u2014").replace(/--/g, "\u2013").replace(/(\w)'(?=\w|\s|$)/g, "$1\u2019").replace(/``/g, "\u201c").replace(/''/g, "\u201d").replace(/`/g, "\u2018").replace(/'/g, "\u2019"); // TeX's ligatures
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -16,11 +18,11 @@ const unwrap = (s: string) => { for (let p = ""; p !== s;) { p = s; s = s.replac
 export function texToRash(texPath: string, style: string): string {
   const src = readFileSync(texPath, "utf8").replace(/(^|[^\\])%.*$/gm, "$1");
   const [pre0, rest] = src.split("\\begin{document}");
-  // ceurart puts \title, \author, \address... after \begin{document}, before \maketitle: they are the head, read from there and taken out of the body.
-  const ceur = /\\documentclass(?:\[[^\]]*\])?\{ceurart\}/.test(pre0), cut = rest.indexOf("\\maketitle");
-  let front = ceur && cut >= 0 ? rest.slice(0, cut) : "";
+  // "frontAfterBegin" (ceurart): \title, \author, \address... come after \begin{document}, before \maketitle: they are the head, read from there and taken out of the body.
+  const cfg = venues[style]?.tex ?? {}, ceur = cfg.authors === "bracket", cut = rest.indexOf("\\maketitle");
+  let front = cfg.frontAfterBegin && cut >= 0 ? rest.slice(0, cut) : "";
   const pre = pre0 + front;
-  if (front) for (const cmd of ["copyrightyear", "copyrightclause", "conference", "title", "tnotetext", "address", "cortext", "fntext", "author"]) {
+  if (front) for (const cmd of cfg.frontCommands ?? ["title", "tnotetext", "address", "cortext", "fntext", "author", ...Object.values(cfg.fields ?? {})]) {
     for (let i = front.indexOf(`\\${cmd}`); i >= 0; i = front.indexOf(`\\${cmd}`, i)) {
       let j = i + cmd.length + 1;
       if (front[j] === "[") j = front.indexOf("]", j) + 1;
@@ -47,7 +49,7 @@ export function texToRash(texPath: string, style: string): string {
     for (const m of pre.matchAll(/\\author\[([^\]]*)\]\{([^}]*)\}(?:\[([\s\S]*?)\])?/g)) {
       n++;
       const tail = after(m.index! + m[0].length), marks = [/\\cormark\[/.test(tail.split("\\address")[0]) ? "*" : "", /\\fnmark\[/.test(tail.split("\\address")[0]) ? "\u2020" : ""].filter(Boolean);
-      if (marks.length) head.push(`<meta about="#author_${n}" property="writ:ceur.marks" content="${marks.join(",")}"/>`);
+      if (marks.length) head.push(`<meta about="#author_${n}" property="writ:${style}.marks" content="${marks.join(",")}"/>`);
       const email = /email=([^,\s\]]+)/.exec(m[3] ?? "")?.[1], orcid = /orcid=([^,\s\]]+)/.exec(m[3] ?? "")?.[1], url = /url=([^,\s\]]+)/.exec(m[3] ?? "")?.[1];
       head.push(`<meta about="#author_${n}" name="dc.creator" content="${attr(m[2].trim())}"/>`);
       if (email) head.push(`<meta about="#author_${n}" property="schema:email" content="${attr(email)}"/>`);
@@ -56,10 +58,8 @@ export function texToRash(texPath: string, style: string): string {
       for (const a of m[1].split(",")) head.push(`<link about="#author_${n}" property="schema:affiliation" href="#aff_${a.trim()}"/>`);
     }
     for (const m of pre.matchAll(/\\address\[(\d+)\]\{([^}]*)\}/g)) head.push(`<meta about="#aff_${m[1]}" typeof="schema:Organization" property="schema:name" content="${attr(typo(m[2].replace(/\s+/g, " ").trim()))}"/>`);
-    for (const [cmd, prop] of [["copyrightyear", "year"], ["copyrightclause", "clause"]]) { const v = arg(pre, cmd); if (v) head.push(`<meta property="writ:ceur.${prop}" content="${attr(v.replace(/\s+/g, " ").trim())}"/>`); }
-    for (const [cmd, prop] of [["cortext", "cortext"], ["fntext", "fntext"]]) { const m = new RegExp(`\\\\${cmd}\\[\\d+\\]\\{([^}]*)\\}`).exec(pre); if (m) head.push(`<meta property="writ:ceur.${prop}" content="${attr(typo(m[1].trim()))}"/>`); }
-    const conf = arg(pre, "conference");
-    if (conf) head.push(`<meta property="writ:ceur.conference" content="${attr(typo(conf.replace(/\s+/g, " ").trim()))}"/>`);
+    for (const [prop, cmd] of Object.entries(cfg.fields ?? {})) { const v = arg(pre, cmd); if (v) head.push(`<meta property="writ:${style}.${prop}" content="${attr(typo(v.replace(/\s+/g, " ").trim()))}"/>`); }
+    for (const [cmd, prop] of [["cortext", "cortext"], ["fntext", "fntext"]]) { const m = new RegExp(`\\\\${cmd}\\[\\d+\\]\\{([^}]*)\\}`).exec(pre); if (m) head.push(`<meta property="writ:${style}.${prop}" content="${attr(typo(m[1].trim()))}"/>`); }
   }
   groups.forEach((g, gi) => {
     const email = arg(g.find((l) => l.startsWith("\\texttt")) ?? "", "texttt").replace(/\\([{}])/g, "$1") || undefined; // the sample's line as printed, braces included

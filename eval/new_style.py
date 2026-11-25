@@ -8,9 +8,12 @@ from pathlib import Path
 args = sys.argv[1:]
 root = Path(args.pop(args.index("--root") + 1) if "--root" in args else Path(__file__).resolve().parent.parent.parent / "styles")
 args = [a for a in args if a != "--root"]
-if len(args) != 2 or not re.fullmatch(r"[a-z][a-z0-9]*", args[0]):
-    sys.exit('usage: new_style.py <id> "<Name>"   (id: lowercase letters and digits, it is also the compiler template name)')
+cls = args.pop(args.index("--class") + 1) if "--class" in args else None
+args = [a for a in args if a != "--class"]
+if len(args) != 2 or not re.fullmatch(r"[a-z][a-z0-9]*", args[0]) or (cls and not re.fullmatch(r"[A-Za-z0-9_-]+", cls)):
+    sys.exit('usage: new_style.py <id> "<Name>" [--class <latex class name, default: id>]   (id: lowercase letters and digits, it is also the compiler template name)')
 sid, name = args
+cls = cls or sid
 d = root / "src" / sid
 # A folder that only holds the venue's export.xsl (an XSLT venue that has no style yet) is filled in; one with a style is never touched.
 if (d / "index.ts").exists() or (d / "style.css").exists():
@@ -37,7 +40,10 @@ import {{ scoped }} from "../scope.ts";
 // The CSS lives next to this file (style.css); `pnpm build` inlines it into css.generated.ts, scoped() binds its bare selectors to the paper box.
 export const {sid}: Style = {{ ...{{ id: "{sid}", name: "{name}", paper: "US Letter", page: {{ size: [215.9, 279.4], margins: [25.4, 25.4, 25.4, 25.4] }}, fields: [] }}, css: scoped(CSS["{sid}/style"]), editor: "" }};
 ''')
-(d / "venue.json").write_text('{ "sample": "sample/REPLACE-WITH-SAMPLE.tex", "dirs": ["class", "sample"], "media": "media" }\n')
+(d / "venue.json").write_text('{ "sample": "sample/REPLACE-WITH-SAMPLE.tex", "dirs": ["class", "sample"], "media": "media", "engine": "pdflatex", "fonts": [], "tex": {} }\n')
+# a generic front matter, so the LaTeX route compiles on the first run; an export.xsl the person already wrote is kept
+if not (d / "export.xsl").exists():
+    (d / "export.xsl").write_text((Path(__file__).resolve().parent / "export.xsl.tmpl").read_text().replace("@CLASS@", cls))
 (d / "SOURCE.txt").write_text(f'''The LaTeX files of the {name} style are third-party and not in git. Get them and put them here:
   class/    the class file(s) and what they need
   sample/   the official sample .tex and its .bib (name it in venue.json)
@@ -59,6 +65,6 @@ with open(root / ".gitignore", "a") as g:
 print(f"""created {d}
 next:
   1. put the class and the sample in class/ and sample/ (see SOURCE.txt) and name the sample in venue.json
-  2. the compiler needs a LaTeX template called "{sid}": add it to TEMPLATES in compiler/src/latex.ts (or src/{sid}/export.xsl in the styles package: it is found by folder name)
-  3. extend compiler/eval/tex2rash.ts for the constructs the sample uses
+  2. src/{sid}/export.xsl is a generic front matter for \\documentclass{{{cls}}}: adjust it to the class's own commands (found by folder name, no registry)
+  3. venue.json: set "engine" (xelatex, lualatex), "fonts" and the "tex" block (see compiler/eval/venues.ts); extend compiler/eval/tex2rash.ts only for body constructs the sample uses
   4. (cd {root} && pnpm build)  then  make eval ARGS={sid}  and follow the style-from-tex skill""")

@@ -1,5 +1,5 @@
 # Pinned toolchain for the evaluation. shortcut: tag not digest, pin by digest before the release tag.
 FROM docker.io/library/node:24-bookworm
-RUN apt-get update && apt-get install -y --no-install-recommends latexmk texlive-latex-recommended texlive-latex-extra texlive-fonts-recommended texlive-science texlive-fonts-extra texlive-publishers poppler-utils default-jre-headless libsaxonhe-java chromium fonts-urw-base35 fonts-liberation && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends latexmk texlive-latex-recommended texlive-latex-extra texlive-fonts-recommended texlive-science texlive-fonts-extra texlive-publishers texlive-xetex texlive-luatex poppler-utils default-jre-headless libsaxonhe-java chromium fonts-urw-base35 fonts-liberation && rm -rf /var/lib/apt/lists/*
 # The TeX tree's OpenType fonts that a venue's class sets (CEUR's ceurart uses Libertinus and FontAwesome icons), for Chromium to print the paged PDF in the same face.
 RUN printf '<?xml version="1.0"?><!DOCTYPE fontconfig SYSTEM "fonts.dtd"><fontconfig><dir>/usr/share/texlive/texmf-dist/fonts/opentype/public/libertinus-fonts</dir><dir>/usr/share/texlive/texmf-dist/fonts/opentype/public/fontawesome5</dir></fontconfig>' > /etc/fonts/conf.d/60-libertinus.conf && fc-cache -f

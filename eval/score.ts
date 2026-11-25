@@ -21,6 +21,11 @@ const missing = new Set(Object.values(venues).filter((v) => !existsSync(v.sample
 for (const id of missing) console.error(`skipping ${id}: ${venues[id].sample} is missing; see ${venues[id].dir}/SOURCE.txt`);
 const searchDirs = [`${root}eval/classes`, `${root}vendor/rash/cls`, `${root}vendor/rash/papers`, `${root}vendor/rash/examples`, ...Object.values(venues).flatMap((v) => v.dirs)].map((d) => `${d}//`).join(":") + ":";
 const [only, arg] = process.argv.slice(2);
+// A venue declares the fonts its reference PDF uses; Chromium (paged route) can only match them if the container has them.
+for (const v of Object.values(venues)) if (!missing.has(v.id) && (!only || only === v.id)) for (const f of v.fonts) {
+  const got = spawnSync("fc-match", ["-f", "%{family}", f], { encoding: "utf8" }).stdout.split(",")[0];
+  if (got.toLowerCase() !== f.toLowerCase()) console.error(`warning: ${v.id}: font "${f}" is not in the container (fc-match gives "${got}"): the fonts check cannot pass; see eval/Containerfile`);
+}
 const filter = only && !arg ? (ref[only] ?? "chr-sample").split("/").pop()!.replace(/\.tex$/, "") : arg === "all" ? "" : arg; // one style alone = one paper (+ its reference); `all` for every paper
 const jobs = [...new Set([...Object.keys(TEMPLATES), ...Object.keys(VENUES), ...Object.keys(venues)]).values().map((t) => ["ts", t] as const), ...Object.keys(upstream).map((t) => ["upstream", t] as const), ...Object.keys(ref).map((t) => ["ref", t] as const), ...Object.keys(ref).map((t) => ["paged", t] as const)].filter(([, t]) => (!only || t === only) && !missing.has(t)).sort(([a], [b]) => +(b === "ref") - +(a === "ref")); // reference first: later rows are compared with it
 // The reference sample is converted to RASH (kept next to the outputs) so both sides start from the same content.
@@ -38,7 +43,7 @@ for (const [c, t] of jobs) for (const p of c === "ref" ? [ref[t]] : [...corpus, 
     else {
       writeFileSync(`${out}${name}.tex`, c === "ref" ? readFileSync(resolve(root, p), "utf8") : c === "ts" ? await exportLaTeX(p.endsWith(".tex") ? rash(p, t, out, name) : readFileSync(resolve(root, p), "utf8"), t)
         : execFileSync("sh", ["-c", `java -cp "$(ls /usr/share/java/Saxon-HE*.jar | head -1)" net.sf.saxon.Transform -warnings:silent -s:"$0" -xsl:"$1"`, resolve(root, p), `${root}vendor/rash/xslt/${upstream[t]}.xsl`], { encoding: "utf8", maxBuffer: 1 << 28 }).replaceAll("\r", "")); // upstream emits CRLF, which LaTeX reads as part of file names
-      const r = spawnSync("latexmk", ["-g", "-pdf", "-interaction=nonstopmode", "-halt-on-error", "-no-shell-escape", `${name}.tex`], { cwd: out, encoding: "utf8", env: { ...process.env, BIBINPUTS: searchDirs, TEXINPUTS: searchDirs } });
+      const r = spawnSync("latexmk", ["-g", `-${{ pdflatex: "pdf", xelatex: "xelatex", lualatex: "lualatex" }[venues[t]?.engine ?? "pdflatex"]}`, "-interaction=nonstopmode", "-halt-on-error", "-no-shell-escape", `${name}.tex`], { cwd: out, encoding: "utf8", env: { ...process.env, BIBINPUTS: searchDirs, TEXINPUTS: searchDirs } });
       ok = r.status === 0;
       log = readFileSync(`${out}${name}.log`, "utf8");
       if (ok) spawnSync("latexmk", ["-c", `${name}.tex`], { cwd: out }); // drop aux files and the log; a failed build keeps its log to read
