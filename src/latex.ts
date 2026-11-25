@@ -78,7 +78,7 @@ export type Options = {
   /** `\copbreak` ends page 1 before the section that comes after this many sections (document order, nested ones count). */
   copbreak?: number;
 };
-const UNNUMBERED = new Set(["plain-language-summary"]);
+const UNNUMBERED = new Set(["plain-language-summary", "declaration-on-generative-ai"]);
 const STATEMENTS = new Set(["supplementary-material", "acknowledgments", "acknowledgements", "ethical-standard", "author-contribution", "funding", "competing-interests", "data-availability"]);
 // natbib label: "Family", "A and B" or "A et al." plus "(year)", from CSL-JSON.
 const bibLabel = (c: any) => {
@@ -213,7 +213,7 @@ export function toLaTeX(html: string, template: Template = "rash", opts: Options
       return `\\begin{thebibliography}{99}\n${items}\\end{thebibliography}\n\n`;
     }
     const label = e.getAttribute("id") ? `\\label{${texId(e.getAttribute("id")!)}}` : "";
-    const app = opts.cup && role === "doc-appendix" && !appendix ? ((appendix = true), "\\appendix\n\n") : "";
+    const app = role === "doc-appendix" && !appendix ? ((appendix = true), "\\appendix\n\n") : "";
     return `${brk}${app}\\${LEVELS[Math.min(depth, 3)]}{${title}}${label}\n\n${body()}`;
   };
 

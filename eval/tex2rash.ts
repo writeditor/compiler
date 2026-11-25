@@ -5,7 +5,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 
-const typo = (s: string) => s.replace(/---/g, "\u2014").replace(/--/g, "\u2013").replace(/(\w)'(?=\w|\s|$)/g, "$1\u2019").replace(/``/g, "\u201c").replace(/''/g, "\u201d"); // TeX's ligatures
+const typo = (s: string) => s.replace(/---/g, "\u2014").replace(/--/g, "\u2013").replace(/(\w)'(?=\w|\s|$)/g, "$1\u2019").replace(/``/g, "\u201c").replace(/''/g, "\u201d").replace(/`/g, "\u2018").replace(/'/g, "\u2019"); // TeX's ligatures
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const attr = (s: string) => esc(s).replace(/"/g, "&quot;");
 const id = (s: string) => s.replace(/[^A-Za-z0-9_-]/g, "-");
@@ -33,7 +33,7 @@ export function texToRash(texPath: string, style: string): string {
   front = front.replace(/\\(?:tnotemark|cormark|fnmark)\[[^\]]*\]/g, "");
   const lipsum = [...readFileSync(execFileSync("kpsewhich", ["lipsum.ltd.tex"], { encoding: "utf8" }).trim(), "utf8").matchAll(/\\NewLipsumPar\{%[^\n]*\n([\s\S]*?)\}%/g)].map((m) => m[1].replace(/\s+/g, " ").trim());
   const whole = front ? front + rest.slice(cut) : rest;
-  let body = whole.slice(0, whole.lastIndexOf("\\end{document}")).replace(/\\maketitle/g, "").replace(/^\\appendix\s*$/gm, "").replace(/^\\(?:cormark|fnmark)\[[^\]]*\]\s*$/gm, "");
+  let body = whole.slice(0, whole.lastIndexOf("\\end{document}")).replace(/^[ \t]*\\maketitle[ \t]*$/gm, "").replace(/\\begin\{math\}([\s\S]*?)\\end\{math\}/g, (_, m) => "$" + m.trim() + "$").replace(/^\\appendix\s*$(?![\s\S]*^\\appendix\s*$)/m, "\\appendixmark").replace(/^\\(?:cormark|fnmark)\[[^\]]*\]\s*$/gm, "");
 
   // ---- head ----
   const titleArg = arg(pre, "title"), thanks = arg(titleArg, "thanks");
@@ -83,7 +83,7 @@ export function texToRash(texPath: string, style: string): string {
   // ---- numbering and citation order, before any text is written ----
   const num = new Map<string, string>(), cited: string[] = [], c = [0, 0, 0], f = { figure: 0, table: 0 };
   let last = "";
-  for (const m of body.matchAll(/\\(section|subsection|subsubsection)(\*?)\{|\\begin\{(figure|table)\}|\\label\{([^}]*)\}|\\cite\{([^}]*)\}/g)) {
+  for (const m of body.matchAll(/\\(section|subsection|subsubsection)(\*?)\{|\\begin\{(figure|table)\*?\}|\\label\{([^}]*)\}|\\cite\{([^}]*)\}/g)) {
     if (m[1] && !m[2]) { const l = ["section", "subsection", "subsubsection"].indexOf(m[1]); c[l]++; c.fill(0, l + 1); last = c.slice(0, l + 1).join("."); }
     else if (m[3]) last = String(++f[m[3] as "figure" | "table"]);
     else if (m[4]) num.set(m[4], last);
@@ -98,7 +98,7 @@ export function texToRash(texPath: string, style: string): string {
       String.raw`(?:(?<kind>Section|Figure|Table)[ ~])?\\ref\{(?<ref>[^}]*)\}`, String.raw`\\lipsum\[(?<lip>\d+)\]`, String.raw`\\cite\{(?<cite>[^}]*)\}`,
       String.raw`\\verb(?<vd>[^a-zA-Z*\s])(?<verb>.*?)\k<vd>`, String.raw`\\url\{(?<url>[^}]*)\}`, String.raw`\\href\{(?<href>[^}]*)\}\{(?<hrefText>(?:[^{}]|\{[^{}]*\})*)\}`,
       String.raw`\\footnote\{(?<fn>(?:[^{}]|\{[^{}]*\})*)\}`, String.raw`\\(?<fmt>textbf|textit|emph)\{(?<fmtText>[^{}]*)\}`, String.raw`\{\\(?<sw>itshape|em)\s+(?<swText>[^{}]*)\}`,
-      String.raw`\\texttt\{(?<tt>(?:[^{}]|\{[^{}]*\})*)\}`, String.raw`\$(?<math>[^$]*)\$`, String.raw`\\(?<logo>LaTeX|TeX)(?:\{\})?`, String.raw`\\(?<ch>dots|ldots|O|newline|sep)\b\s*`, String.raw`\\(?<sym>[&%_ ])`, "(?<tilde>~)",
+      String.raw`\\texttt\{(?<tt>(?:[^{}]|\{[^{}]*\})*)\}`, String.raw`\\\$(?<dollar>)`, String.raw`\$(?<math>[^$]*)\$`, String.raw`\\(?<logo>LaTeX|TeX)(?:\{\})?`, String.raw`\\(?<ch>dots|ldots|O|newline|sep)\b\s*`, String.raw`\\(?<sym>[&%_ ])`, "(?<tilde>~)",
     ].join("|"), "g");
     for (const m of s.matchAll(re)) {
       out += txt(s.slice(at, m.index)); at = m.index + m[0].length;
@@ -111,16 +111,17 @@ export function texToRash(texPath: string, style: string): string {
         : g.href ? `<a href="${attr(g.href)}">${txt(g.hrefText)}</a>`
         : g.fn ? (notes.push(inl(g.fn)), `<a href="#fn-${notes.length}">${notes.length}</a>`)
         : g.fmt ? `<${g.fmt === "textbf" ? "strong" : "em"}>${esc(g.fmtText)}</${g.fmt === "textbf" ? "strong" : "em"}>`
-        : g.sw ? `<em>${esc(g.swText)}</em>`
+        : g.sw ? `<em>${inl(g.swText)}</em>`
+        : g.dollar != null ? "$"
         : g.tt != null ? `<code>${esc(g.tt.replace(/\{\\char'134\}/g, "\\").replace(/[{}]/g, ""))}</code>`
         : g.math != null ? `<span role="math">${esc(g.math)}</span>`
         : g.logo ? (g.logo === "LaTeX" ? '<span class="latex">L<sup>a</sup>T<sub>e</sub>X</span>' : '<span class="latex">T<sub>e</sub>X</span>') // the logo is markup, as the class prints it
-        : g.ch ? ({ dots: "\u2026", ldots: "\u2026", O: "\u00d8", newline: " ", sep: ", " } as Record<string, string>)[g.ch]
+        : g.ch ? ({ dots: "\u2026", ldots: "\u2026", O: "\u00d8", newline: "<br/>", sep: ", " } as Record<string, string>)[g.ch]
         : g.sym ? (g.sym === " " ? " " : g.sym) : " ";
     }
     return out + txt(s.slice(at));
   };
-  const par = (s: string) => `<p>${inl(s.replace(/\s+/g, " ").trim())}</p>`;
+  const par = (s: string) => { const ni = /^\s*\\noindent\b/.test(s); return `<p${ni ? ' style="text-indent:0"' : ""}>${inl(s.replace(/^\s*\\noindent\b\s*/, "").replace(/\s+/g, " ").trim())}</p>`; }; // \noindent starts a paragraph that is not indented
 
   // ---- body ----
   const out: string[] = [];
@@ -145,16 +146,20 @@ export function texToRash(texPath: string, style: string): string {
     if (name === "quote") return `<blockquote>${par(s)}</blockquote>`;
     if (name === "center") return s.split(/\n\s*\n/).map((p) => par(p).replace("<p>", '<p style="text-align:center">')).join("");
     const lab = arg(s, "label"), cap = caption(s);
-    if (name === "figure") return `<figure id="${id(lab)}"><p><img src="${imgSrc(/\\includegraphics(?:\[[^\]]*\])?\{([^}]*)\}/.exec(s)?.[1] ?? "figure1.png")}"${s.includes("\\fbox") ? ' style="width:50%"' : ""} alt="${attr(cap)}"/></p><figcaption>${inl(cap)}</figcaption></figure>`;
+    if (name === "figure") return `<figure id="${id(lab)}"><p><img src="${imgSrc(/\\includegraphics(?:\[[^\]]*\])?\{([^}]*)\}/.exec(s)?.[1] ?? "figure1.png")}"${(() => { const w = /\\includegraphics\[[^\]]*width=([^,\]]*)/.exec(s)?.[1].trim() ?? "", f = /^([\d.]*)\\(?:line|text)width$/.exec(w), m = /^\\(?:line|text)width\s*-\s*([\d.]+pt)$/.exec(w); return f ? ` style="width:${+(f[1] || 1) * 100}%"` : m ? ` style="width:calc(100% - ${m[1]})"` : s.includes("\\fbox") ? ' style="width:50%"' : ""; })()} alt="${attr(cap)}"/></p><figcaption>${inl(cap)}</figcaption></figure>`;
     if (name === "table") {
       const rows = s.slice(s.indexOf("\\toprule") + 8, s.indexOf("\\bottomrule")).split("\\\\").map((r) => r.replace(/\\(?:cmidrule(?:\([a-z]\))?\{[^}]*\}|midrule)/g, (m) => (m === "\\midrule" ? "§" : "")).trim()).filter(Boolean);
       let head = true;
-      const trs = rows.map((r) => { if (r.includes("§")) head = false; const cells = r.replace("§", "").split("&").map((x) => x.trim()), th = head; return `<tr>${cells.map((x) => { const sp = /^\\multicolumn\{(\d+)\}\{[^}]*\}\{([\s\S]*)\}$/.exec(x), tag = th ? "th" : "td"; return `<${tag}${sp ? ` colspan="${sp[1]}"` : ""}>${inl(sp ? sp[2] : x)}</${tag}>`; }).join("")}</tr>`; });
+      const cols = [...(/\\begin\{tabular\}\{([^}]*)\}/.exec(s)?.[1] ?? "").replace(/[^lcr]/g, "")]; // the column spec, as alignments
+      const align = (i: number) => (cols[i] === "c" ? ' style="text-align:center"' : cols[i] === "r" ? ' style="text-align:right"' : "");
+      const trs = rows.map((r) => { if (r.includes("§")) head = false; const cells = r.replace("§", "").split("&").map((x) => x.trim()), th = head; return `<tr>${cells.map((x, ci) => { const sp = /^\\multicolumn\{(\d+)\}\{[^}]*\}\{([\s\S]*)\}$/.exec(x), tag = th ? "th" : "td"; return `<${tag}${sp ? ` colspan="${sp[1]}"` : align(ci)}>${inl(sp ? sp[2] : x)}</${tag}>`; }).join("")}</tr>`; });
       return `<figure id="${id(lab)}"><table>${trs.join("")}</table><figcaption>${inl(cap)}</figcaption></figure>`;
     }
     throw new Error(`unsupported environment: ${name}`);
   };
-  const text = (s: string) => { for (const p of s.split(/\n\s*\n/)) if (p.trim() && !/^\\(bibliographystyle|bibliography)\b/.test(p.trim())) out.push(par(p)); };
+  // The references go where \bibliography is (a class may put them before an appendix): a placeholder now, the section below.
+  let inApp = false;
+  const text = (s: string) => { for (const p of s.split(/\n\s*\n/)) { if (/^\s*\\appendixmark\b/.test(p)) { close(0); inApp = true; } else if (/^\\bibliography\{/m.test(p)) { close(0); out.push("@@BIB@@"); } else if (p.trim() && !/^\\bibliographystyle\b/.test(p.trim())) out.push(par(p)); } };
   let at = 0, pending = "";
   const re = /\\begin\{(\w+\*?)\}([\s\S]*?)\\end\{\1\}|\\(section|subsection|subsubsection|paragraph)(\*?)\{([^}]*)\}|\\verb([^a-zA-Z*\s]).*?\6/g; // the last alternative only steps over \verb|...| so a \begin inside it is not an environment
   const flush = (s: string) => { const m = /^\s*\\label\{([^}]*)\}/.exec(s); if (m && pending) { out[out.length - 1] = out.at(-1)!.replace(/id="[^"]*"/, `id="${id(m[1])}"`); s = s.slice(m[0].length); } pending = ""; text(s); };
@@ -165,25 +170,41 @@ export function texToRash(texPath: string, style: string): string {
     if (m[1] === "abstract") { close(0); out.push(`<section role="doc-abstract"><h1>Abstract</h1>${m[2].split(/\n\s*\n/).filter((p) => p.trim()).map(par).join("")}</section>`); }
     else if (m[1] === "acknowledgments") { close(0); out.push(`<section role="doc-acknowledgements"><h1>Acknowledgments</h1>${m[2].split(/\n\s*\n/).filter((p) => p.trim()).map(par).join("")}</section>`); }
     else if (m[1]) out.push(env(m[1], m[2]).replace(/^<(ul|ol)>/, (_, t) => (!/\n\s*\n\s*$/.test(before) ? `<${t} class="tight">` : `<${t}>`))); // a list straight after text (no blank line) gets less space in LaTeX: no \partopsep
-    else { const lvl = ["section", "subsection", "subsubsection", "paragraph"].indexOf(m[3]) + 1, ack = m[4] && /^acknowledg/i.test(m[5]); section(lvl, m[5], m[4] ? m[5].toLowerCase() : `sec-${m[5].toLowerCase()}`, ack ? "doc-acknowledgements" : ""); pending = m[5]; }
+    else { const lvl = ["section", "subsection", "subsubsection", "paragraph"].indexOf(m[3]) + 1, ack = m[4] && /^acknowledg/i.test(m[5]); section(lvl, m[5], m[4] ? m[5].toLowerCase() : `sec-${m[5].toLowerCase()}`, ack ? "doc-acknowledgements" : inApp ? "doc-appendix" : ""); pending = m[5]; }
   }
   flush(body.slice(at)); close(0);
   if (notes.length) out.push(`<section role="doc-endnotes"><h1>Notes</h1><ol>${notes.map((t, i) => `<li id="fn-${i + 1}" role="doc-endnote"><p>${t}</p></li>`).join("")}</ol></section>`);
 
   // ---- bibliography from the .bib next to the sample ----
-  const bib = texPath.replace(/[^/]*$/, `${arg(body, "bibliography")}.bib`);
+  const bib = texPath.replace(/[^/]*$/, `${[...body.matchAll(/^\\bibliography\{([^}]*)\}/gm)].at(-1)?.[1] ?? ""}.bib`); // the last one: a verbatim example earlier in the text may show a \bibliography too
   if (cited.length && existsSync(bib)) {
     const entries = new Map<string, Record<string, string>>();
     for (const m of readFileSync(bib, "utf8").matchAll(/@(\w+)\{([^,]+),([\s\S]*?)\n\}/g)) entries.set(m[2], Object.fromEntries([["type", m[1]], ...[...m[3].matchAll(/(\w+)=\{((?:[^{}]|\{[^{}]*\})*)\}/g)].map((x) => [x[1], x[2]])]));
     // BibTeX `unsrt` look: "First Last, ... and First Last. Sentence-case title. In <em>Venue</em>, pages a-b. Org, year."
     const who = (a: string) => { const ns = a.split(" and ").map((p) => { const [l, f = ""] = p.split(",").map((x) => x.trim()); return `${f} ${l}`.trim(); }); return ns.length < 3 ? ns.join(" and ") : `${ns.slice(0, -1).join(", ")}, and ${ns.at(-1)}`; };
     const lower = (t: string) => t.toLowerCase().replace(/^./, (c) => c.toUpperCase()).replace(/(: )(.)/g, (_, a, c) => a + c.toUpperCase());
+    // The reference build's .bbl holds each entry as the class's bibliography style printed it: take that text (as an import from LaTeX does), not our guess of it.
+    const bbl = new Map<string, string>();
+    try {
+      for (const x of readFileSync(new URL(`./out/${style}/ref/${texPath.replace(/^.*\/|\.tex$/g, "")}.${style}.ref.bbl`, import.meta.url), "utf8").replace(/^%.*$/gm, "").split("\\bibitem").slice(1)) {
+        const m = /^\[\{[\s\S]*?\}\]\{([^}]*)\}([\s\S]*)$/.exec(x);
+        if (!m) continue;
+        let t = m[2].replace(/\\end\{thebibliography\}[\s\S]*$/, "").replace(/\{(\\(?:La)?TeX)\}/g, "$1");
+        for (let n = 0; n < 3; n++) t = t.replace(/\\bibinfo\{[^}]*\}\{((?:[^{}]|\{[^{}]*\})*)\}/g, "$1");
+        t = t.replace(/\\newblock/g, "\u2005").replace(/(?<![A-Za-z}])\{([^{}\\]*)\}/g, "$1").replace(/\\DOIprefix\s*\\doi\{([^}]*)\}/g, "doi:\\href{https://doi.org/$1}{$1}").replace(/\\URLprefix\s*\\url/g, "URL: \\url").replace(/\\emph\{((?:[^{}]|\{[^{}]*\})*)\}/g, "{\\em $1}").replace(/~(?![^{}]*\})/g, " ");
+        bbl.set(m[1], t.replace(/\s+/g, " ").trim());
+      }
+    } catch { /* no reference build yet: the guess below */ }
     const li = cited.map((k) => {
+      if (bbl.has(k)) return `<li id="${id(k)}" role="doc-biblioentry"><p>${inl(bbl.get(k)!)}</p></li>`;
       const e = entries.get(k) ?? {}, pages = e.pages ? `, pages ${e.pages.replace("--", "–")}` : "";
       const venue = e.booktitle ? `In <em>${esc(e.booktitle)}</em>${pages}. ${e.organization ? esc(e.organization) + ", " : ""}${e.year}.` : `<em>${esc(e.journal ?? "")}</em>${pages}, ${e.year}.`;
       return `<li id="${id(k)}" role="doc-biblioentry"><p>${esc(who(e.author ?? ""))}. ${esc(lower(e.title ?? ""))}. ${venue}</p></li>`;
     });
-    out.push(`<section role="doc-bibliography"><h1>References</h1><ul>${li.join("")}</ul></section>`);
+    const refs = `<section role="doc-bibliography"><h1>References</h1><ul>${li.join("")}</ul></section>`, at = out.indexOf("@@BIB@@");
+    if (at < 0) out.push(refs); else out[at] = refs;
   }
+  const bibAt = out.indexOf("@@BIB@@");
+  if (bibAt >= 0) out.splice(bibAt, 1); // \bibliography with nothing cited
   return `<!DOCTYPE html>\n<html xmlns="http://www.w3.org/1999/xhtml" prefix="schema: http://schema.org/ prism: http://prismstandard.org/namespaces/basic/2.0/ writ: urn:writ:">\n<head>\n<meta charset="UTF-8"/>\n${head.join("\n")}\n</head>\n<body>\n${out.join("\n")}\n</body>\n</html>\n`;
 }
