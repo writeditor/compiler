@@ -1,0 +1,39 @@
+# Papers the corpus runs use (eval/corpus_score.ts): arXiv cs.DL CC BY papers without a known conversion problem, and the papers shipped in vendor/rash.
+# The 14 arXiv papers left out are the ones that need a manual look (see eval/corpus-arxiv-references.json flags).
+2610.16639
+2610.17997
+2610.20048
+2610.22474
+2610.28648
+2610.28649
+2610.28653
+2610.28656
+2610.28666
+2610.33018
+2610.33980
+2610.34245
+2610.34379
+2610.34449
+2610.36075
+2610.37671
+2610.38585
+2610.39641
+2610.40745
+2610.40768
+2610.42001
+2611.01076
+2611.03508
+2611.03912
+2611.04734
+2611.06762
+2611.17052
+2611.17233
+2611.20319
+2611.26052
+2611.28338
+
+# vendor/rash (4 papers: that is all it ships)
+vendor/rash/examples/evaluating-citation-functions-in-cito.html
+vendor/rash/papers/rash-demo-iswc2015.html
+vendor/rash/papers/rash-poster-iswc2016.html
+vendor/rash/papers/rash-poster-www2016.html

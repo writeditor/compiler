@@ -6,7 +6,7 @@ const LATEX_SPECIAL: Record<string, string> = { "\\": "\\textbackslash{}", "{": 
 // Arguments of \\href/\\includegraphics/\\label/\\cite: drop anything that could close the argument or start a command.
 const texId = (s: string) => String(s).replace(/[^\w:.-]/g, "");
 // shortcut: embedded data: images are not decoded to files, so they become a visible placeholder; write them out when the exporter can return files.
-const graphic = (img: Element | null | undefined) => { const src = img?.getAttribute("src") ?? ""; return src.startsWith("data:") ? "\\fbox{[embedded image omitted]}" : `\\includegraphics[width=${img ? imgWidth(img) : ""}\\linewidth]{${texPath(src)}}`; };
+const graphic = (img: Element | null | undefined) => { if (!img) return ""; /* a placeholder block has no file */ const src = img?.getAttribute("src") ?? ""; return src.startsWith("data:") ? "\\fbox{[embedded image omitted]}" : `\\includegraphics[width=${img ? imgWidth(img) : ""}\\linewidth]{${texPath(src)}}`; };
 const texPath = (s: string) => String(s).replace(/[\\{}%#$&^~]/g, "");
 const texUrl = (s: string) => String(s).replace(/[\\{}]/g, "").replace(/[%#]/g, "\\$&");
 // A verbatim body must not close its own environment.
@@ -184,11 +184,16 @@ export function toLaTeX(html: string, template: Template = "rash", opts: Options
       const span = (c: Element) => Math.max(1, Math.floor(Number(c.getAttribute("colspan"))) || 1);
       const cols = Math.max(1, ...rows.map((r) => r.reduce((n, c) => n + span(c), 0)));
       const bt = T.preamble.includes("booktabs"); // booktabs templates: three-rule tables, plain header cells, \cmidrule under spanning headers
-      const cell = (c: Element) => { const t = inline(c).trim(), x = tagOf(c) === "th" && !bt ? `\\textbf{${t}}` : t; return span(c) > 1 ? `\\multicolumn{${span(c)}}{c}{${x}}` : x; };
       const firstBody = rows.findIndex((r) => !r.every((c) => tagOf(c) === "th")), nh = firstBody < 0 ? rows.length : firstBody;
+      const cell = (c: Element, i: number) => { const t = inline(c).trim(), x = tagOf(c) === "th" && !bt ? `\\textbf{${t}}` : t; return span(c) > 1 ? `\\multicolumn{${span(c)}}{${i < nh ? "c" : "l"}}{${x}}` : x; }; // a spanning body row is a group label: flush left
+      // A table whose text is wider than the line wraps its long columns (X in tabularx); the others keep their natural width.
+      // shortcut: widths guessed from character counts (about 100 per \linewidth at 10pt), not measured.
+      const len = Array.from({ length: cols }, (_, k) => Math.max(0, ...rows.map((r) => { let at = 0; for (const c of r) { if (at === k && span(c) === 1) return (c.textContent ?? "").trim().length; at += span(c); } return 0; })));
+      const wrap = len.reduce((a, b) => a + b, 0) > 100 ? len.map((n) => n > 30) : len.map(() => false), x = wrap.some(Boolean);
+      const spec = wrap.map((w) => (w ? "X" : "l")).join("");
       const rules = (r: Element[], i: number) => { let at = 1, o = ""; if (bt && i < nh) { for (const c of r) { if (span(c) > 1) o += `\\cmidrule(r){${at}-${at + span(c) - 1}}\n`; at += span(c); } if (i === nh - 1) o += "\\midrule\n"; } return o; };
-      const body = rows.map((r, i) => r.map(cell).join(" & ") + " \\\\\n" + rules(r, i)).join("");
-      return `\\begin{table}\n\\centering\n${cap}\n\\begin{tabular}{${"l".repeat(cols)}}\n${bt ? "\\toprule" : "\\hline"}\n${body}${bt ? "\\bottomrule" : "\\hline"}\n\\end{tabular}\n\\end{table}\n\n`;
+      const body = rows.map((r, i) => r.map((c) => cell(c, i)).join(" & ") + " \\\\\n" + rules(r, i)).join("");
+      return `\\begin{table}\n\\centering\n${cap}\n${x ? `\\begin{tabularx}{\\linewidth}{${spec}}` : `\\begin{tabular}{${spec}}`}\n${bt ? "\\toprule" : "\\hline"}\n${body}${bt ? "\\bottomrule" : "\\hline"}\n\\end{${x ? "tabularx" : "tabular"}}\n\\end{table}\n\n`;
     }
     const img = e.querySelector("img");
     if (opts.cup) return `\\begin{figure}[t]\n\\FIG{${graphic(img)}}{${cap}}\n\\end{figure}\n\n`;
@@ -261,7 +266,7 @@ export function toLaTeX(html: string, template: Template = "rash", opts: Options
   // Neighbouring citations separated only by a comma are one \cite{a,b}, which numbers compress to [1, 2];
   const merge = (t: string) => { for (let p = ""; p !== t;) { p = t; t = t.replace(/\\(cite[pt]?)\{([^{}]*)\}, \\\1\{([^{}]*)\}/g, "\\$1{$2,$3}"); } return t.replace(/\n\n(\\begin\{equation\}|\\\[)/g, "\n$1"); }; // and a display after a blank line would open an empty paragraph first
   const body = merge(rest.map((n, i) => (i === firstBack ? "\\begin{Backmatter}\n\n" : "") + (tagOf(n) === "p" ? block(n, 0) : section(n, 0))).join("") + (firstBack < 0 ? "" : "\\end{Backmatter}\n\n"));
-  return `${T.preamble}${body.includes("\\sout{") ? "\n\\usepackage[normalem]{ulem}" : ""}
+  return `${T.preamble}${body.includes("\\sout{") ? "\n\\usepackage[normalem]{ulem}" : ""}${body.includes("\\begin{tabularx}") ? "\n\\usepackage{tabularx}" : ""}
 \\title{${tex(meta.title)}${meta.subtitle ? ` \\\\ \\large ${tex(meta.subtitle)}` : ""}${titleNote}}
 ${!authors ? "" : "and" in T ? `\\author{${authors}}\n` : authors + "\n"}\\begin{document}
 ${abstract}${T.abstractFirst ? keywords : ""}\\maketitle

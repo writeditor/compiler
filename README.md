@@ -39,3 +39,52 @@ make eval ARGS=arxiv      # one style: its reference sample, compiled by LaTeX, 
 ```
 
 One row per paper and template: whether the exported `.tex` compiles with `latexmk`, page count, undefined references. Add metrics as columns in `eval/score.ts`.
+
+### Paper corpus (arXiv)
+
+`make corpus ARGS=arxiv` puts real papers through one style twice, RASH → LaTeX → PDF (`ts`) and RASH → HTML+CSS → Paged.js → PDF (`paged`), and scores `paged` against `ts`.
+
+| File | In git | What it is |
+|---|---|---|
+| `eval/corpus-arxiv.tsv` | yes | the corpus: 45 arXiv cs.DL papers, CC BY (id, licence, authors, title) |
+| `eval/corpus-eval.txt` | yes | the papers the scorer runs (31 of them, plus 4 from `vendor/rash`) |
+| `eval/corpus-arxiv-references.json` | yes | each paper's references and conversion flags, written by `html2rash.ts` |
+| `eval/corpus-results-<style>.csv` | yes | the last full run, one row per paper |
+| `eval/corpus/arxiv/<id>/` | no | downloaded arXiv HTML + images, and `rash.html` made from them |
+| `eval/out/corpus/<style>/<id>/{ts,paged}/` | no | the two PDFs, the `.tex` and its log |
+
+```sh
+make corpus-fetch                   # downloads every paper in corpus-arxiv.tsv (one request every 3 s: slow the first time, then only what is missing) and writes each rash.html
+node eval/html2rash.ts [id ...]     # only the RASH again, after changing the converter
+make corpus ARGS=arxiv              # every paper: writes eval/corpus-results-arxiv.csv
+make corpus ARGS="arxiv 2610.33018" # one paper: prints its row, the CSV is left alone
+python3 -I eval/fetch_arxiv_html.py --select [count] [from]   # pick a new corpus (rewrites corpus-arxiv.tsv): only on purpose
+```
+
+### Setting up on another machine
+
+1. **Tools**: git, Node ≥ 24, pnpm, Python 3, podman, ImageMagick (`magick`/`convert`: SVG figures and multi-panel figures).
+2. **Repos side by side** (the compiler links `../styles`, and the container mounts it):
+   ```sh
+   mkdir writeditor && cd writeditor
+   git clone git@github.com:writeditor/compiler.git
+   git clone git@github.com:writeditor/styles.git
+   (cd styles && pnpm install && pnpm build)
+   (cd compiler && git submodule update --init && pnpm install)
+   ```
+   Check out the same branch in both when the work spans them.
+3. **Third-party LaTeX classes and samples**: not in git (copyright), required by the tests and the scorer. `make check-third-party` lists what is missing and points to each `SOURCE.txt`:
+   - `styles/src/arxiv/class/PRIMEarxiv.sty`, `styles/src/arxiv/sample/`: PRIME AI arXiv template (`styles/src/arxiv/SOURCE.txt`)
+   - `styles/src/ceur/class/`, `styles/src/ceur/sample/`, `compiler/eval/classes/ceurart/`: CEUR-WS `CEURART.zip`
+   - `styles/src/oup/class/`, `styles/src/oup/sample/`, `compiler/eval/classes/oup/`: OUP authoring template
+   - `compiler/test/chr-sample.html`: RASH of the Cambridge CHR sample
+
+   Download sources are not all recorded, so the simplest way is to carry them from a machine that has them:
+   ```sh
+   # on the old machine, in the folder holding compiler/ and styles/
+   tar czf writ-third-party.tgz styles/src/*/class styles/src/*/sample compiler/eval/classes compiler/test/chr-sample.html
+   # on the new one, same folder
+   tar xzf writ-third-party.tgz
+   ```
+4. **Container** (LaTeX, Chromium, fonts; the scorer runs only in it): `cd compiler && make eval-build`
+5. **Corpus**: `make corpus-fetch`, then `make corpus ARGS=arxiv`. Check `make test` passes too.

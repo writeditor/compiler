@@ -8,7 +8,7 @@ import { exportPdf } from "../pdf/index.ts";
 import { STYLES, MARKUP } from "@writeditor/styles";
 import { dirname, relative, resolve } from "node:path";
 import { venues } from "./venues.ts";
-import { fingerprint, compare, pagesPx, pixelDiffs, type Fingerprint } from "./fingerprint.ts";
+import { fingerprint, compare, pagesPx, pixelDiffs, readWords, layoutDiff, ssims, fontDiff, type Fingerprint } from "./fingerprint.ts";
 
 const root = new URL("../", import.meta.url).pathname;
 const corpus = ["vendor/rash/examples", "vendor/rash/papers", "test"].flatMap((d) => readdirSync(root + d).filter((f) => f.endsWith(".html")).map((f) => `${d}/${f}`));
@@ -30,8 +30,8 @@ const filter = only && !arg ? (ref[only] ?? "chr-sample").split("/").pop()!.repl
 const jobs = [...new Set([...Object.keys(TEMPLATES), ...Object.keys(VENUES), ...Object.keys(venues)]).values().map((t) => ["ts", t] as const), ...Object.keys(upstream).map((t) => ["upstream", t] as const), ...Object.keys(ref).map((t) => ["ref", t] as const), ...Object.keys(ref).map((t) => ["paged", t] as const)].filter(([, t]) => (!only || t === only) && !missing.has(t)).sort(([a], [b]) => +(b === "ref") - +(a === "ref")); // reference first: later rows are compared with it
 // The reference sample is converted to RASH (kept next to the outputs) so both sides start from the same content.
 const rash = (p: string, t: string, out: string, name: string) => { const h = texToRash(resolve(root, p), t); writeFileSync(`${out}${name}.rash.html`, h); return h; };
-const refs: Record<string, { fp: Fingerprint; px: ReturnType<typeof pagesPx> }> = {};
-const lines = ["paper,template,compiler,compiles,pages,undefined_refs,style_score,pixel_diff"];
+const refs: Record<string, { fp: Fingerprint; px: ReturnType<typeof pagesPx>; ws: ReturnType<typeof readWords> }> = {};
+const lines = ["paper,template,compiler,compiles,pages,undefined_refs,style_score,pixel_diff,wer,cer,line_cer,lines_matched,line_end_recall,page_agree,dy_p95,ssim,size_agree,text_box_iou"];
 for (const [c, t] of jobs) for (const p of c === "ref" ? [ref[t]] : [...corpus, ...(ref[t] ? [ref[t]] : [])].filter((p) => !filter || p.includes(filter))) {
   const out = `${root}eval/out/${t}/${c}/`; // eval/out/<style>/<ref|ts|paged|upstream>/
   mkdirSync(out, { recursive: true });
@@ -51,19 +51,19 @@ for (const [c, t] of jobs) for (const p of c === "ref" ? [ref[t]] : [...corpus, 
     const pages = ok ? execFileSync("pdfinfo", [`${name}.pdf`], { cwd: out, encoding: "utf8" }).match(/Pages:\s+(\d+)/)![1] : "";
     row = `${ok},${pages},${(log.match(/(Reference|Citation) .*undefined/gi) ?? []).length},`;
     if (ok && ref[t]) {
-      const fp = fingerprint(`${name}.pdf`, out), px = pagesPx(`${name}.pdf`, out);
-      if (c === "ref") refs[t] = { fp, px };
+      const fp = fingerprint(`${name}.pdf`, out), px = pagesPx(`${name}.pdf`, out), ws = readWords(`${name}.pdf`, out);
+      if (c === "ref") refs[t] = { fp, px, ws };
       const base = refs[t];
       if (base) {
         const { checks, score } = compare(fp, base.fp);
-        const diffs = pixelDiffs(px, base.px);
-        writeFileSync(`${out}${name}.report.json`, JSON.stringify({ checks, score, pixel_diff_by_page: diffs, fingerprint: fp, reference: base.fp }, null, 2));
+        const diffs = pixelDiffs(px, base.px), layout = layoutDiff(ws, base.ws), ss = ssims(px, base.px), ssim = +(ss.reduce((x, y) => x + y, 0) / ss.length).toFixed(3), fd = fontDiff(`${name}.pdf`, out, fp, base.fp);
+        writeFileSync(`${out}${name}.report.json`, JSON.stringify({ checks, score, pixel_diff_by_page: diffs, ssim, ssim_by_page: ss, layout, fonts: fd, fingerprint: fp, reference: base.fp }, null, 2));
         console.error(`  pixel diff by page: ${diffs.join(" ")}`);
         console.error(`  ${name}: ${Object.entries(checks).map(([k, v]) => `${v ? "ok  " : "FAIL"} ${k}`).join(", ")}`);
-        row += `${score.toFixed(2)},${diffs[0]}`;
-      } else row += ",";
-    } else row += ",";
-  } catch (e) { row = "false,,,,"; console.error(`  ${name}: ${(e as Error).message.split("\n")[0]}`); }
+        row += `${score.toFixed(2)},${diffs[0]},${layout.wer},${layout.cer},${layout.line_cer},${layout.lines_matched},${layout.line_end_recall},${layout.page_agree},${layout.dy_p95},${ssim},${layout.size_agree},${layout.text_box_iou}`;
+      } else row += ",,,,,,,,,,,";
+    } else row += ",,,,,,,,,,,";
+  } catch (e) { row = "false,,,,,,,,,,,,,,"; console.error(`  ${name}: ${(e as Error).message.split("\n")[0]}`); }
   lines.push(`${relative(root, resolve(root, p))},${t},${c},${row}`);
   console.error(lines.at(-1)); // progress
 }
@@ -73,11 +73,11 @@ if (!only) writeFileSync(root + "eval/results.csv", lines.join("\n") + "\n"); //
 for (const t of new Set(lines.slice(1).map((l) => l.split(",")[1]).filter((t) => venues[t] && !missing.has(t)))) {
   const rows = ["ref", "ts", "paged"].flatMap((c) => lines.slice(1).filter((l) => { const f = l.split(","); return f[1] === t && f[2] === c && f[0] === relative(root, venues[t].sample); }).map((l) => [c, ...l.split(",").slice(3)]));
   const rep = (c: string) => { try { return JSON.parse(readFileSync(`${root}eval/out/${t}/${c}/${venues[t].sample.split("/").pop()!.replace(/\.tex$/, "")}.${t}.${c}.report.json`, "utf8")); } catch { return null; } };
-  const table = ["| Output | Compiles | Pages | Undefined refs | Style score | Failed checks | Pixel diff by page |", "|---|---|---|---|---|---|---|", ...rows.map(([c, ok, pages, undef, score]) => {
+  const table = ["| Output | Compiles | Pages | Undefined refs | Style score | Failed checks | Pixel diff by page | Word error rate | Character error rate | Line CER | Lines matched | Line ends kept | Same page | dy p95 (pt) | SSIM | Same font size | Text box IoU | Fonts missing / embedded |", "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|", ...rows.map(([c, ok, pages, undef, score]) => {
     const r = rep(c);
-    return `| ${c === "ref" ? "reference (official class)" : c === "ts" ? "LaTeX (our compiler)" : "PDF (paged)"} | ${ok} | ${pages || "-"} | ${undef || "-"} | ${score || "-"} | ${r ? Object.entries(r.checks).filter(([, v]) => !v).map(([k]) => k).join(", ") || "none" : "-"} | ${r ? r.pixel_diff_by_page.join(" / ") : "-"} |`;
+    return `| ${c === "ref" ? "reference (official class)" : c === "ts" ? "LaTeX (our compiler)" : "PDF (paged)"} | ${ok} | ${pages || "-"} | ${undef || "-"} | ${score || "-"} | ${r ? Object.entries(r.checks).filter(([, v]) => !v).map(([k]) => k).join(", ") || "none" : "-"} | ${r ? r.pixel_diff_by_page.join(" / ") : "-"} | ${r?.layout ? `${r.layout.wer} | ${r.layout.cer} | ${r.layout.line_cer} | ${r.layout.lines_matched} | ${r.layout.line_end_recall} | ${r.layout.page_agree} | ${r.layout.dy_p95} | ${r.ssim} | ${r.layout.size_agree} | ${r.layout.text_box_iou}` : "- | - | - | - | - | - | - | - | - | -"} | ${r?.fonts ? `${r.fonts.missing.join(", ") || "none"} / ${r.fonts.embedded ? "yes" : "no"}` : "-"} |`;
   })].join("\n");
-  const block = `<!-- metrics:start -->\n## Compilation check\n\nSample: \`${relative(venues[t].dir, venues[t].sample)}\`, converted to RASH, compiled by each output and compared with the reference PDF. Last run ${new Date().toISOString().slice(0, 10)} (\`make eval ARGS=${t}\`).\n\n${table}\n\nStyle score: share of the checks (page size, fonts, margins, leading, header/footer, title) that match the reference. Pixel diff: share of pixels that differ on each page (0 = identical). Both are measured, never edited by hand.\n<!-- metrics:end -->`;
+  const block = `<!-- metrics:start -->\n## Compilation check\n\nSample: \`${relative(venues[t].dir, venues[t].sample)}\`, converted to RASH, compiled by each output and compared with the reference PDF. Last run ${new Date().toISOString().slice(0, 10)} (\`make eval ARGS=${t}\`).\n\n${table}\n\nStyle score: share of the checks (page size, fonts, margins, leading, header/footer, title) that match the reference. Pixel diff: share of pixels that differ on each page (0 = identical). Word error rate: edit distance between the word sequences (letters only: digits, bullets and symbols are ignored) of the PDF and the reference, over the reference words. Character error rate: the same on the letter stream without word boundaries. Line CER: lines aligned first, then letters wrong inside matched lines (unmatched lines wholly wrong); Lines matched: reference lines that found a partner. Line ends kept: share of the reference's line breaks (on aligned words) that fall at the same word. Same page: aligned words on the same page. dy p95: 95th percentile vertical displacement of aligned words. SSIM: mean over pages at 50 dpi. Same font size: aligned words whose box height, relative to the body height, is within 5%. Text box IoU: overlap of the page\'s text area, mean over pages. All measured, never edited by hand.\n<!-- metrics:end -->`;
   const f = `${venues[t].dir}/README.md`, old = existsSync(f) ? readFileSync(f, "utf8") : `# ${t}\n\n`;
   writeFileSync(f, /<!-- metrics:start -->[\s\S]*<!-- metrics:end -->/.test(old) ? old.replace(/<!-- metrics:start -->[\s\S]*<!-- metrics:end -->/, () => block) : old.trimEnd() + "\n\n" + block + "\n");
 }

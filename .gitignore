@@ -7,3 +7,4 @@ __pycache__/
 .pytest_cache/
 skills/
 test/chr-sample.html
+eval/corpus/

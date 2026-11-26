@@ -54,3 +54,27 @@ Paged pixel diff by page: 0.0745 / 0.0554 / 0.0499 / 0.0913 / 0.0953 / 0.0788 / 
 - Page 5/6: figures and tables numbered in markup.ts (`data-label`), because Paged.js counts every matching counter-increment (a table was "Figure 3"); `\includegraphics[width=\linewidth-80pt]` is read; tabular column specs (`ccl`) become cell alignment; KaTeX at 1em with no display margin of its own, the space below a display formula moved to the text after it (which is not indented), bottom rule a little under the last row.
 - Page 8/9: first block of a continued section or list gets TeX's \topskip (5pt), \bibsep (.1pt), \newblock as a wider space, the tilde in a URL kept, ’ for every apostrophe.
 Left: table* caption is indented 17pt in the reference, list glue at the class's values costs page 1 (0.0745), the listing's continuation lines, URL and DOI break points, the "LaTeX" logo in the reference list.
+
+## Continuation 2026-11-25 (3): tester checks, LaTeX build, icons and note calls
+Style score: `ts` 0.50 -> 0.83, paged 0.33 -> 0.83 (only `fonts` fails). Pages 9 / 9. Paged pixel diff unchanged (0.0744 on page 1).
+Corrections to the tester (each measured the wrong thing; never to make a row pass, the reference is untouched):
+- `page_size`: 1 pt tolerance (Chromium rounds the page to whole CSS px: 594.96 x 841.92 vs 595.28 x 841.89).
+- `fonts`: the container's poppler (22.12) prints Chromium's Type 3 fonts as `[none]`, so the paged PDF looked font-less; names are now also read from `/FontName` in the file.
+- `margins`: right margin is the most common line end, not the maximum (one overfull line or a long URL decided it).
+- `title`: first line's width (2%) and vertical centre (5 pt), not word-box height (Libertinus Sans boxes differ between LaTeX and Chromium) and not the tallest word of the page (a foot-block icon).
+- WER is letters only (list bullets, footnote digits, math symbols extract differently without looking different). `fontDiff` had its two arguments swapped in the first version of the report; fixed.
+Converter: `\begin{itemize}` holding a listing was cut at the listing, left an empty list and a literal `\item` (LaTeX build failed): lists are now found on the whole body, ignoring list commands inside listings.
+Style: ORCID uses Font Awesome 5 Brands (U+F8D2) like the reference instead of a drawn "iD" badge; note calls are `#2f4f4f`, 7.5 pt, raised 4 pt, with `font-variant-position: normal` (Paged.js turns on the font's superscript glyphs and the raised, shrunk result was a speck).
+Known differences, with reasons:
+- `fonts` fails on DejaVuSans: the reference sets `\sum` and `\to` (page 6) with it, ours uses KaTeX. A math-rendering difference, the person's decision.
+- WER 0.157 (paged) is mostly the reference's listings: its lstlisting cells extract one letter per word ("c e u r a r t"), ours one word. Not a visible difference.
+- Page 2 headings sit 2.5-3 pt higher than the reference's and several rows jump by 2.7-4.6 pt (`offsets.py ceur 2`): not tuned yet.
+
+## Continuation 2026-11-25 (4): spacing, measured by ink
+`eval/offsets.py` reads word boxes, which are wrong for Libertinus Sans and Mono lines (it showed headings 3 pt high that the ruler shows aligned). New tool `eval/inkshift.py <id> <page>`: each reference line band slid over ours on the row ink profile (144 dpi), shift in pt, no font involved. Page 2 before: lines of the list-with-listings region drift +5.5 pt by the foot of the page.
+Kept: `li > pre` margins (listing inside an item: 5 pt below when text follows, 6.5 pt as the item's last block, 5 pt above a `.lst`; the ruler showed 0.5 pt too much per block). Page 2 mean |shift| 2.45 -> 1.00 pt (max 2.5), pixel diff p2 0.0555 -> 0.0550, no page worse, SSIM 0.705 -> 0.706.
+Tried and reverted: heading gaps (4.1 top 8 -> 13 pt, subsection bottom 7.5, section-to-section 12 -> 15 pt) brought page 2 to 0.78 mean / 2.0 max but made pages 4, 5 and 7 worse (p7 0.0843 -> 0.1000, p5 0.1054 -> 0.1157). Reason: the reference sets pages flush bottom, so its glue (lists, headings, \parskip) stretches or shrinks per page: page 1 lists are 3.5-4 pt looser than the class values, page 2's 4.2 gap 3.5 pt, page 3 tighter. One fixed value cannot match all pages.
+Known: the gap above "4.2. Title variants" is 3.5 pt short on page 2; page 1's lists need +3.5 above and +4 below; page 3 breaks lower. They need a per-page stretch (flushbottom), not a style value.
+
+## Continuation 2026-11-25 (5): content metrics that survive letter-spaced listings and reordering
+`eval/fingerprint.ts` / `score.ts` now also report `cer` (edit distance on the letter stream, no word boundaries; banded Levenshtein), `line_cer` and `lines_matched` (lines aligned first by edit distance over the line sequence, leftovers paired in any order, then letters wrong inside matched lines). Self-check: `eval/layout.check.ts`. ceur paged: WER 0.169, CER 0.021, line CER 0.123, 0.888 of reference lines matched (LaTeX output: 0.214 / 0.061 / 0.070 / 0.955).
